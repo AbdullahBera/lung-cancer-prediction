@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import plotly.graph_objs as go
+import plotly.express as px  # Import Plotly Express for bar plots
 from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import roc_curve, auc
@@ -122,30 +123,32 @@ if st.session_state.page == 'Predictor-Dependent Analysis':
     prediction = model.predict_proba(input_df)[0][1]
 
     # Display probability of lung cancer based on selected predictors
-    st.markdown(f'<div class="custom-title">Probability of Lung Cancer: {prediction:.2f}</div>', unsafe_allow_html=True)
+    # Make prediction and display as a percentage
+    prediction_percentage = prediction * 100  # Convert to percentage
 
+    # Display probability of lung cancer based on selected predictors
+    st.markdown(f'<div class="custom-title">Probability of Lung Cancer: {prediction_percentage:.2f}%</div>', unsafe_allow_html=True)
     # Interactive Feature Impact Plot
     st.markdown('<div class="custom-title">Interactive Feature Impact</div>', unsafe_allow_html=True)
 
     fig = go.Figure()
 
-    # Clean plotting to avoid double lines and only show impact, no probabilities
+    # Clean plotting to avoid double lines and show impact dynamically based on selected features
     for feature in selected_predictors:
         feature_values = np.linspace(df[feature].min(), df[feature].max(), 100)
-        impact = []
-        for value in feature_values:
-            temp_input = input_df.copy()  # Copy input_df once, not the whole df
-            temp_input[feature] = value
-            impact.append(value)  # Mock impact values, modify based on actual model behavior
+        
+        # Mock impact calculation: adjust this based on actual behavior (just a placeholder for now)
+        impact = model.coef_[0][df.columns[:-1].get_loc(feature)] * feature_values  # Scaled impact using model coefficient
 
         fig.add_trace(go.Scatter(x=feature_values, y=impact, mode='lines', name=feature))
 
     fig.update_layout(
         title="Impact of Selected Features",
         xaxis=dict(title="Feature Value", titlefont=dict(size=18)),
-        yaxis=dict(title="Impact Value (no probabilities)", titlefont=dict(size=18)),
+        yaxis=dict(title="Impact Value (based on selected features)", titlefont=dict(size=18)),
         showlegend=True
     )
+
     st.plotly_chart(fig)
 
 # Non-Predictor Dependent Analysis Page
