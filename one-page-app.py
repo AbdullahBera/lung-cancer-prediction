@@ -3,7 +3,7 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import plotly.graph_objs as go
-import plotly.express as px  # Import Plotly Express for bar plots
+import plotly.express as px
 from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import roc_curve, auc
@@ -11,16 +11,19 @@ from sklearn.metrics import roc_curve, auc
 # Set wide mode for Streamlit app layout
 st.set_page_config(layout="wide")
 
-# Custom CSS to increase the font size of all titles above the graphs to at least 20px
+# Custom CSS to adjust spacing
 st.markdown("""
     <style>
         .custom-title {
-            font-size: 20px;
+            font-size: 16px;  /* Reduced font size */
             font-weight: bold;
-            margin-top: 20px;
+            margin-top: 10px;  /* Preserved margin for titles */
         }
-        .stButton>button[selected="true"] {
-            background-color: red;
+        .stSlider {
+            margin-top: -10px;  /* Adjust space above the slider */
+        }
+        .stCheckbox {
+            margin-bottom: -10px;  /* Removed space between checkboxes */
         }
     </style>
 """, unsafe_allow_html=True)
@@ -71,32 +74,27 @@ if st.sidebar.button("Non-Predictor Dependent Analysis", key="non_predictor"):
 if st.session_state.page == 'Predictor-Dependent Analysis':
     st.markdown('<div class="custom-title">Lung Cancer Prediction and Feature Impact</div>', unsafe_allow_html=True)
 
-    # Age slider above the graph
+    # Age slider with preserved spacing
     st.markdown('<div class="custom-title">Age Slider</div>', unsafe_allow_html=True)
     age_value = st.slider("Select Age", int(df['AGE'].min()), int(df['AGE'].max()), int(df['AGE'].mean()))
 
-    # Set up buttons for feature selection and display them horizontally using columns
+    # Set up horizontal checkboxes for feature selection
     st.markdown('<div class="custom-title">Select Features to Analyze their Impact</div>', unsafe_allow_html=True)
 
     predictors = [col for col in df.columns[:-1] if col != 'AGE']
 
-    # Create a row of columns for the buttons
-    n_columns = len(predictors)
-    cols = st.columns(n_columns)  # Create a column for each button
+    # Create a list of selected predictors using checkboxes arranged horizontally
+    selected_predictors = []
+    num_cols = 4  # Number of checkboxes per row
+    rows = [predictors[i:i + num_cols] for i in range(0, len(predictors), num_cols)]
 
-    if 'selected_predictors' not in st.session_state:
-        st.session_state.selected_predictors = []
-
-    for idx, predictor in enumerate(predictors):
-        button_label = f"{predictor} (Selected)" if predictor in st.session_state.selected_predictors else predictor
-        if cols[idx].button(button_label, key=predictor):
-            if predictor in st.session_state.selected_predictors:
-                st.session_state.selected_predictors.remove(predictor)
-            else:
-                st.session_state.selected_predictors.append(predictor)
+    for row in rows:
+        cols = st.columns(num_cols)
+        for col, predictor in zip(cols, row):
+            if col.checkbox(predictor, key=predictor):
+                selected_predictors.append(predictor)
 
     # Display selected predictors
-    selected_predictors = st.session_state.selected_predictors
     if selected_predictors:
         st.write(f"Currently selected predictors: {', '.join(selected_predictors)}")
     else:
@@ -119,15 +117,12 @@ if st.session_state.page == 'Predictor-Dependent Analysis':
     # Ensure that the input_df columns are in the same order as during training
     input_df = input_df[df.columns[:-1]]  # Reorder to match the training feature order
 
-    # Make prediction (without percentage, just value)
-    prediction = model.predict_proba(input_df)[0][1]
-
-    # Display probability of lung cancer based on selected predictors
     # Make prediction and display as a percentage
-    prediction_percentage = prediction * 100  # Convert to percentage
+    prediction_percentage = model.predict_proba(input_df)[0][1] * 100  # Convert to percentage
 
     # Display probability of lung cancer based on selected predictors
     st.markdown(f'<div class="custom-title">Probability of Lung Cancer: {prediction_percentage:.2f}%</div>', unsafe_allow_html=True)
+
     # Interactive Feature Impact Plot
     st.markdown('<div class="custom-title">Interactive Feature Impact</div>', unsafe_allow_html=True)
 
@@ -144,9 +139,10 @@ if st.session_state.page == 'Predictor-Dependent Analysis':
 
     fig.update_layout(
         title="Impact of Selected Features",
-        xaxis=dict(title="Feature Value", titlefont=dict(size=18)),
-        yaxis=dict(title="Impact Value (based on selected features)", titlefont=dict(size=18)),
-        showlegend=True
+        xaxis=dict(title="Feature Value", titlefont=dict(size=14)),  # Reduced font size for labels
+        yaxis=dict(title="Impact Value (based on selected features)", titlefont=dict(size=14)),  # Reduced font size for labels
+        showlegend=True,
+        height=350  # Reduced plot height to minimize white space
     )
 
     st.plotly_chart(fig)
@@ -162,19 +158,19 @@ elif st.session_state.page == 'Non-Predictor Dependent Analysis':
     col1, col2 = st.columns(2)
 
     with col1:
-        # Feature Importance with larger height
+        # Feature Importance with smaller height
         st.markdown('<div class="custom-title">Feature Importance</div>', unsafe_allow_html=True)
         coef_df = pd.DataFrame({'Feature': X_train.columns, 'Coefficient': model.coef_[0]})
         coef_df = coef_df.sort_values('Coefficient', key=abs, ascending=False)
-        fig_imp = px.bar(coef_df, x='Coefficient', y='Feature', orientation='h', height=600)
+        fig_imp = px.bar(coef_df, x='Coefficient', y='Feature', orientation='h', height=350)  # Reduced height
         fig_imp.update_layout(
-            xaxis=dict(title="Coefficient", titlefont=dict(size=18)),
-            yaxis=dict(title="Feature", titlefont=dict(size=18))
+            xaxis=dict(title="Coefficient", titlefont=dict(size=14)),  # Reduced font size
+            yaxis=dict(title="Feature", titlefont=dict(size=14))  # Reduced font size
         )
         st.plotly_chart(fig_imp)
 
     with col2:
-        # ROC Curve with larger height
+        # ROC Curve with smaller height
         st.markdown('<div class="custom-title">ROC Curve</div>', unsafe_allow_html=True)
         y_pred_proba = model.predict_proba(X_test)[:, 1]
         fpr, tpr, _ = roc_curve(y_test, y_pred_proba)
@@ -183,9 +179,9 @@ elif st.session_state.page == 'Non-Predictor Dependent Analysis':
         roc_curve_fig.add_trace(go.Scatter(x=fpr, y=tpr, mode='lines', name=f'ROC curve (AUC = {roc_auc:.2f})'))
         roc_curve_fig.add_trace(go.Scatter(x=[0, 1], y=[0, 1], mode='lines', name='Random Chance', line=dict(dash='dash')))
         roc_curve_fig.update_layout(
-            xaxis=dict(title="False Positive Rate", titlefont=dict(size=18)),
-            yaxis=dict(title="True Positive Rate", titlefont=dict(size=18)),
-            height=600
+            xaxis=dict(title="False Positive Rate", titlefont=dict(size=14)),  # Reduced font size
+            yaxis=dict(title="True Positive Rate", titlefont=dict(size=14)),  # Reduced font size
+            height=350  # Reduced plot height
         )
         st.plotly_chart(roc_curve_fig)
 
@@ -206,11 +202,11 @@ elif st.session_state.page == 'Non-Predictor Dependent Analysis':
                                           (f1_by_predictor_count['Number of Predictors'] <= 12)]
 
     # Plotting the filtered data
-    plt.figure(figsize=(6, 3))  # Reduced size for F1 Score plot
+    plt.figure(figsize=(4, 2.5))  # Reduced size for F1 Score plot
     plt.plot(filtered_data['Number of Predictors'], filtered_data['F1 Score'], marker='o')
-    plt.xlabel('Number of Predictors')
-    plt.ylabel('F1 Score')
-    plt.title('F1 Score vs. Number of Predictors (8 to 12)')
+    plt.xlabel('Number of Predictors', fontsize=10)  # Reduced font size for xlabel
+    plt.ylabel('F1 Score', fontsize=10)  # Reduced font size for ylabel
+    plt.title('F1 Score vs. Number of Predictors (8 to 12)', fontsize=12)  # Reduced title size
     plt.grid(True)
 
     # Display the plot in the Streamlit app
