@@ -6,44 +6,33 @@ import plotly.graph_objs as go
 import plotly.express as px
 from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import roc_curve, auc
+from sklearn.metrics import roc_curve, auc, accuracy_score, f1_score, roc_auc_score
+from itertools import combinations
 
 # Set wide mode for Streamlit app layout
 st.set_page_config(layout="wide")
 
-# Custom CSS to adjust layout, reduce predictor checkbox size, and add space between sections
+# Custom CSS to adjust spacing
 st.markdown("""
     <style>
         .custom-title {
-            font-size: 14px;  /* Reduced font size */
+            font-size: 16px;  /* Reduced font size */
             font-weight: bold;
-            margin-top: 5px;  /* Minimized margin */
+            margin-top: 10px;  /* Preserved margin for titles */
         }
         .stSlider {
-            margin-top: -10px;  /* Adjusted space above the slider */
-        }
-        .custom-probability {
-            font-size: 20px;  /* Larger font for the probability at the top */
-            font-weight: bold;
-            color: #d9534f;  /* Red color for visibility */
-        }
-        .custom-space {
-            margin-top: 20px;  /* Added space between Probability and Select Age */
-        }
-        .stCheckbox > label {
-            font-size: 12px;  /* Smaller font size for the checkboxes */
-            padding-left: 5px;  /* Reduce space before the label */
+            margin-top: -10px;  /* Adjust space above the slider */
         }
         .stCheckbox {
-            margin-bottom: -5px;  /* Reduce space between checkboxes */
+            margin-bottom: -10px;  /* Removed space between checkboxes */
         }
     </style>
 """, unsafe_allow_html=True)
 
-# Load and preprocess data
+# Modify the load_data function
 @st.cache_data
 def load_data():
-    df = pd.read_csv('/Users/kalu/Desktop/Lin-Reg-project/survey_lung_cancer.csv')
+    df = pd.read_csv('cancer.csv')
     df.columns = ['GENDER', 'AGE', 'SMOKING', 'YELLOW_FINGERS', 'ANXIETY',
                   'PEER_PRESSURE', 'CHRONIC DISEASE', 'FATIGUE', 'ALLERGY', 
                   'WHEEZING', 'ALCOHOL CONSUMING', 'COUGHING', 
@@ -54,22 +43,60 @@ def load_data():
     # Encode categorical variables
     df["GENDER"] = df['GENDER'].map({'M': 1, 'F': 0})
     df['LUNG_CANCER'] = df['LUNG_CANCER'].map({'YES': 1, "NO": 0})
-    return df
+    return df, 'LUNG_CANCER'
 
-# Train the model
-def train_model(df):
-    X = df.drop('LUNG_CANCER', axis=1)
-    y = df['LUNG_CANCER']
+# Add the new fit_models function
+@st.cache_data
+def fit_models(data, target_column):
+    y = data[target_column]
+    X = data.drop(columns=[target_column])
+    
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=24)
+    
+    predictors = X.columns.tolist()
+    
+    results = []
+    
+    for i in range(1, len(predictors) + 1):
+        for combo in combinations(predictors, i):
+            X_train_subset = X_train[list(combo)]
+            X_test_subset = X_test[list(combo)]
+            
+            model = LogisticRegression(solver='liblinear', random_state=24)
+            model.fit(X_train_subset, y_train)
+            y_pred = model.predict(X_test_subset)
+            
+            accuracy = accuracy_score(y_test, y_pred)
+            f1 = f1_score(y_test, y_pred)
+            roc_auc = roc_auc_score(y_test, y_pred)
+            
+            results.append({
+                'Combination': ', '.join(combo),
+                'Number of Predictors': len(combo),
+                'ROC_AUC': roc_auc,
+                'Accuracy': accuracy,
+                'F1 Score': f1,
+                'Coefficients': model.coef_[0]
+            })
 
-    # Split the data with stratification
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, stratify=y, random_state=42)
-    model = LogisticRegression(solver='liblinear', random_state=24)
-    model.fit(X_train, y_train)
-    return model, X_train, X_test, y_train, y_test
+    results_sorted = sorted(results, key=lambda x: x['F1 Score'], reverse=True)
+    
+    return results_sorted
 
-# Load data and train model
-df = load_data()
-model, X_train, X_test, y_train, y_test = train_model(df)
+# Load data and fit models
+df, target_column = load_data()
+model_results = fit_models(df, target_column)
+
+# Use the best model (highest F1 score) for predictions
+best_model = model_results[0]
+best_predictors = best_model['Combination'].split(', ')
+
+# Train the best model
+X_best = df[best_predictors]
+y = df[target_column]
+X_train, X_test, y_train, y_test = train_test_split(X_best, y, test_size=0.2, random_state=24)
+model = LogisticRegression(solver='liblinear', random_state=24)
+model.fit(X_train, y_train)
 
 # Initialize page state
 if 'page' not in st.session_state:
@@ -84,20 +111,13 @@ if st.sidebar.button("Non-Predictor Dependent Analysis", key="non_predictor"):
 
 # Predictor-Dependent Analysis Page
 if st.session_state.page == 'Predictor-Dependent Analysis':
-    
-    # Probability of Lung Cancer at the top
-    st.markdown(f'<div class="custom-probability">Probability of Lung Cancer: 79.47%</div>', unsafe_allow_html=True)
-
-    # Space between Probability of Lung Cancer and Select Age
-    st.markdown('<div class="custom-space"></div>', unsafe_allow_html=True)
-
-    # Age slider (without the "Age Slider" title)
-    age_value = st.slider("Select Age", int(df['AGE'].min()), int(df['AGE'].max()), int(df['AGE'].mean()))
+    st.markdown('<div class="custom-title">Lung Cancer Prediction and Feature Impact</div>', unsafe_allow_html=True)
 
     # Set up horizontal checkboxes for feature selection
     st.markdown('<div class="custom-title">Select Features to Analyze their Impact</div>', unsafe_allow_html=True)
 
-    predictors = [col for col in df.columns[:-1] if col != 'AGE']
+    # Use only the best predictors for selection, excluding AGE
+    predictors = [pred for pred in best_predictors if pred != 'AGE']
 
     # Create a list of selected predictors using checkboxes arranged horizontally
     selected_predictors = []
@@ -110,6 +130,9 @@ if st.session_state.page == 'Predictor-Dependent Analysis':
             if col.checkbox(predictor, key=predictor):
                 selected_predictors.append(predictor)
 
+    # Add AGE slider
+    age = st.slider("AGE", min_value=0, max_value=100, value=50, step=1)
+
     # Display selected predictors
     if selected_predictors:
         st.write(f"Currently selected predictors: {', '.join(selected_predictors)}")
@@ -118,45 +141,53 @@ if st.session_state.page == 'Predictor-Dependent Analysis':
     
     # Calculate probability of lung cancer based on selected features
     input_data = {}
-    for feature in df.columns[:-1]:  # Loop through all features (except target)
-        if feature in selected_predictors:
+    for feature in best_predictors:
+        if feature == 'AGE':
+            input_data[feature] = age
+        elif feature in selected_predictors:
             input_data[feature] = 1  # Set selected features to 1 (checked)
         else:
             input_data[feature] = 0  # Default to 0 (not selected)
 
-    # Adding AGE slider value to input data
-    input_data['AGE'] = age_value
-
     # Convert input data into DataFrame for prediction
     input_df = pd.DataFrame([input_data])
 
-    # Ensure that the input_df columns are in the same order as during training
-    input_df = input_df[df.columns[:-1]]  # Reorder to match the training feature order
+    # Ensure input_df has the same columns as X_train
+    input_df = input_df[X_train.columns]
 
     # Make prediction and display as a percentage
     prediction_percentage = model.predict_proba(input_df)[0][1] * 100  # Convert to percentage
 
-    # Interactive Feature Impact Plot (impact of coefficients without "Interactive Feature Impact" title)
+    # Display probability of lung cancer based on selected predictors with larger font and red color
+    st.markdown(f'<div style="font-size: 24px; font-weight: bold; color: red;">Probability of Lung Cancer: {prediction_percentage:.2f}%</div>', unsafe_allow_html=True)
+
+    # Interactive Feature Impact Plot
+    st.markdown('<div class="custom-title">Interactive Feature Impact</div>', unsafe_allow_html=True)
+
     fig = go.Figure()
 
-    # Display the impact of coefficients for selected features
+    # Clean plotting to avoid double lines and show impact dynamically based on selected features
     for feature in selected_predictors:
-        feature_values = np.linspace(df[feature].min(), df[feature].max(), 100)
-        
-        # Impact is the coefficient scaled by feature values
-        impact = model.coef_[0][df.columns[:-1].get_loc(feature)] * feature_values
+        if feature in best_predictors and feature != 'AGE':  # Exclude AGE from the plot
+            feature_values = np.array([0, 1])  # Binary features
+            
+            # Calculate impact using the correct index from best_predictors
+            feature_index = best_predictors.index(feature)
+            impact = model.coef_[0][feature_index] * feature_values
 
-        fig.add_trace(go.Scatter(x=feature_values, y=impact, mode='lines', name=feature))
+            fig.add_trace(go.Scatter(x=feature_values, y=impact, mode='lines', name=feature))
 
-    fig.update_layout(
-        title="Impact of Coefficients",  # Updated the title to reflect coefficient impact
-        xaxis=dict(title="Feature Value", titlefont=dict(size=14)),  # Reduced font size for labels
-        yaxis=dict(title="Impact Value (based on coefficients)", titlefont=dict(size=14)),  # Reduced font size for labels
-        showlegend=True,
-        height=350  # Reduced plot height to minimize white space
-    )
-
-    st.plotly_chart(fig)
+    if len(fig.data) > 0:  # Only update layout if there are traces to plot
+        fig.update_layout(
+            title="Effect of Features on Lung Cancer Probability",
+            xaxis=dict(title="Feature Value", titlefont=dict(size=14)),
+            yaxis=dict(title="Impact on Odds of Lung Cancer", titlefont=dict(size=14)),
+            showlegend=True,
+            height=350
+        )
+        st.plotly_chart(fig)
+    else:
+        st.write("No selected features are part of the best model. Please select features used in the model to see their impact.")
 
 # Non-Predictor Dependent Analysis Page
 elif st.session_state.page == 'Non-Predictor Dependent Analysis':
@@ -199,25 +230,18 @@ elif st.session_state.page == 'Non-Predictor Dependent Analysis':
     # F1 Score vs Number of Predictors
     st.markdown('<div class="custom-title">F1 Score vs Number of Predictors</div>', unsafe_allow_html=True)
 
-    # Simulating a DataFrame for demonstration
-    result_df = pd.DataFrame({
-        'Number of Predictors': np.arange(1, 21),
-        'F1 Score': np.random.rand(20)
-    })
+    # Use the actual results from fit_models
+    result_df = pd.DataFrame(model_results)
 
     # Calculate the maximum F1 Score for each number of predictors
     f1_by_predictor_count = result_df.groupby('Number of Predictors')['F1 Score'].max().reset_index()
 
-    # Filter the data for number of predictors between 8 and 12
-    filtered_data = f1_by_predictor_count[(f1_by_predictor_count['Number of Predictors'] >= 8) &
-                                          (f1_by_predictor_count['Number of Predictors'] <= 12)]
-
-    # Plotting the filtered data
+    # Plotting the data
     plt.figure(figsize=(4, 2.5))  # Reduced size for F1 Score plot
-    plt.plot(filtered_data['Number of Predictors'], filtered_data['F1 Score'], marker='o')
+    plt.plot(f1_by_predictor_count['Number of Predictors'], f1_by_predictor_count['F1 Score'], marker='o')
     plt.xlabel('Number of Predictors', fontsize=10)  # Reduced font size for xlabel
     plt.ylabel('F1 Score', fontsize=10)  # Reduced font size for ylabel
-    plt.title('F1 Score vs. Number of Predictors (8 to 12)', fontsize=12)  # Reduced title size
+    plt.title('F1 Score vs. Number of Predictors', fontsize=12)  # Reduced title size
     plt.grid(True)
 
     # Display the plot in the Streamlit app
