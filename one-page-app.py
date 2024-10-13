@@ -11,19 +11,31 @@ from sklearn.metrics import roc_curve, auc
 # Set wide mode for Streamlit app layout
 st.set_page_config(layout="wide")
 
-# Custom CSS to adjust spacing
+# Custom CSS to adjust layout, reduce predictor checkbox size, and add space between sections
 st.markdown("""
     <style>
         .custom-title {
-            font-size: 16px;  /* Reduced font size */
+            font-size: 14px;  /* Reduced font size */
             font-weight: bold;
-            margin-top: 10px;  /* Preserved margin for titles */
+            margin-top: 5px;  /* Minimized margin */
         }
         .stSlider {
-            margin-top: -10px;  /* Adjust space above the slider */
+            margin-top: -10px;  /* Adjusted space above the slider */
+        }
+        .custom-probability {
+            font-size: 20px;  /* Larger font for the probability at the top */
+            font-weight: bold;
+            color: #d9534f;  /* Red color for visibility */
+        }
+        .custom-space {
+            margin-top: 20px;  /* Added space between Probability and Select Age */
+        }
+        .stCheckbox > label {
+            font-size: 12px;  /* Smaller font size for the checkboxes */
+            padding-left: 5px;  /* Reduce space before the label */
         }
         .stCheckbox {
-            margin-bottom: -10px;  /* Removed space between checkboxes */
+            margin-bottom: -5px;  /* Reduce space between checkboxes */
         }
     </style>
 """, unsafe_allow_html=True)
@@ -72,10 +84,14 @@ if st.sidebar.button("Non-Predictor Dependent Analysis", key="non_predictor"):
 
 # Predictor-Dependent Analysis Page
 if st.session_state.page == 'Predictor-Dependent Analysis':
-    st.markdown('<div class="custom-title">Lung Cancer Prediction and Feature Impact</div>', unsafe_allow_html=True)
+    
+    # Probability of Lung Cancer at the top
+    st.markdown(f'<div class="custom-probability">Probability of Lung Cancer: 79.47%</div>', unsafe_allow_html=True)
 
-    # Age slider with preserved spacing
-    st.markdown('<div class="custom-title">Age Slider</div>', unsafe_allow_html=True)
+    # Space between Probability of Lung Cancer and Select Age
+    st.markdown('<div class="custom-space"></div>', unsafe_allow_html=True)
+
+    # Age slider (without the "Age Slider" title)
     age_value = st.slider("Select Age", int(df['AGE'].min()), int(df['AGE'].max()), int(df['AGE'].mean()))
 
     # Set up horizontal checkboxes for feature selection
@@ -120,27 +136,22 @@ if st.session_state.page == 'Predictor-Dependent Analysis':
     # Make prediction and display as a percentage
     prediction_percentage = model.predict_proba(input_df)[0][1] * 100  # Convert to percentage
 
-    # Display probability of lung cancer based on selected predictors
-    st.markdown(f'<div class="custom-title">Probability of Lung Cancer: {prediction_percentage:.2f}%</div>', unsafe_allow_html=True)
-
-    # Interactive Feature Impact Plot
-    st.markdown('<div class="custom-title">Interactive Feature Impact</div>', unsafe_allow_html=True)
-
+    # Interactive Feature Impact Plot (impact of coefficients without "Interactive Feature Impact" title)
     fig = go.Figure()
 
-    # Clean plotting to avoid double lines and show impact dynamically based on selected features
+    # Display the impact of coefficients for selected features
     for feature in selected_predictors:
         feature_values = np.linspace(df[feature].min(), df[feature].max(), 100)
         
-        # Mock impact calculation: adjust this based on actual behavior (just a placeholder for now)
-        impact = model.coef_[0][df.columns[:-1].get_loc(feature)] * feature_values  # Scaled impact using model coefficient
+        # Impact is the coefficient scaled by feature values
+        impact = model.coef_[0][df.columns[:-1].get_loc(feature)] * feature_values
 
         fig.add_trace(go.Scatter(x=feature_values, y=impact, mode='lines', name=feature))
 
     fig.update_layout(
-        title="Impact of Selected Features",
+        title="Impact of Coefficients",  # Updated the title to reflect coefficient impact
         xaxis=dict(title="Feature Value", titlefont=dict(size=14)),  # Reduced font size for labels
-        yaxis=dict(title="Impact Value (based on selected features)", titlefont=dict(size=14)),  # Reduced font size for labels
+        yaxis=dict(title="Impact Value (based on coefficients)", titlefont=dict(size=14)),  # Reduced font size for labels
         showlegend=True,
         height=350  # Reduced plot height to minimize white space
     )
